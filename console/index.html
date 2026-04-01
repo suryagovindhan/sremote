@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>sRemote — Technician Console</title>
+  <meta name="description" content="Enterprise remote IT assist technician console — WebRTC powered, TURN relay, full mouse and keyboard control." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0b0d17;
+      --surface:    #13162a;
+      --surface2:   #1c2040;
+      --border:     rgba(255,255,255,.08);
+      --accent:     #4f8ef7;
+      --accent2:    #7c3aed;
+      --success:    #22c55e;
+      --warning:    #f59e0b;
+      --danger:     #ef4444;
+      --text:       #e2e8f0;
+      --text-muted: #64748b;
+      --radius:     12px;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+                 font-family: 'Inter', sans-serif; overflow: hidden; }
+
+    /* ── Top bar ─────────────────────────────────────────────────────────── */
+    #topbar {
+      display: flex; align-items: center; gap: 16px;
+      padding: 10px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      height: 54px;
+    }
+    #topbar .logo {
+      font-weight: 700; font-size: 18px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+      letter-spacing: -.5px;
+    }
+    #topbar .spacer { flex: 1; }
+
+    /* connection fields */
+    #topbar input {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px;
+      padding: 6px 12px; font-size: 13px; font-family: inherit;
+      outline: none; transition: border-color .2s;
+    }
+    #topbar input:focus { border-color: var(--accent); }
+    #topbar input#inp-url   { width: 220px; }
+    #topbar input#inp-room  { width: 120px; }
+    #topbar input#inp-token { width: 200px; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 16px; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      border: none; transition: filter .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.15); }
+    .btn-danger  { background: var(--danger); color: #fff; }
+    .btn-danger:hover  { filter: brightness(1.15); }
+    .btn-ghost {
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: var(--surface); }
+
+    /* status dot */
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--text-muted); flex-shrink: 0;
+      transition: background .3s;
+    }
+    .status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .status-dot.warning   { background: var(--warning); box-shadow: 0 0 8px var(--warning); }
+    .status-dot.error     { background: var(--danger);  box-shadow: 0 0 8px var(--danger);  }
+
+    #status-text { font-size: 12px; color: var(--text-muted); min-width: 160px; }
+
+    /* ── Main viewport ──────────────────────────────────────────────────── */
+    #viewport {
+      position: relative;
+      width: 100%; height: calc(100vh - 54px);
+      display: flex; align-items: center; justify-content: center;
+      background: #050609;
+    }
+
+    #remote-video {
+      max-width: 100%; max-height: 100%;
+      display: block; cursor: crosshair;
+      border-radius: 4px;
+      background-color: #000;
+      object-fit: contain;
+    }
+
+    /* ── Overlays ────────────────────────────────────────────────────────── */
+    .overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px;
+      background: rgba(5, 6, 9, .85);
+      backdrop-filter: blur(6px);
+      border-radius: 4px;
+      transition: opacity .3s;
+    }
+    .overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .overlay-icon { font-size: 48px; }
+    .overlay-title { font-size: 20px; font-weight: 700; }
+    .overlay-sub   { font-size: 14px; color: var(--text-muted); text-align: center; max-width: 360px; }
+
+    /* spinner */
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid var(--surface2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* pulse badge */
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+    /* ── Bottom toolbar ──────────────────────────────────────────────────── */
+    #toolbar {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 8px; align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      padding: 8px 14px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    }
+    #toolbar .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+    #quality-label { font-size: 12px; color: var(--text-muted); }
+    #quality-val   { font-size: 12px; font-weight: 600; color: var(--accent); min-width: 55px; }
+    #latency-val   { font-size: 12px; font-weight: 600; color: var(--success); min-width: 40px; }
+
+    #quality-selector {
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 4px 8px; font-size: 12px; font-family: inherit;
+      outline: none; cursor: pointer;
+    }
+    #quality-selector:focus { border-color: var(--accent); }
+
+    /* fullscreen */
+    #btn-fullscreen { background: none; border: none; color: var(--text);
+                      cursor: pointer; padding: 4px; font-size: 16px;
+                      transition: color .2s; border-radius: 6px; }
+    #btn-fullscreen:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<!-- ── Top bar ─────────────────────────────────────────────────────────────── -->
+<div id="topbar">
+  <span class="logo">⚡ sRemote</span>
+
+  <input id="inp-url"   type="text" placeholder="ws://broker:5695" value="ws://localhost:5695" />
+  <input id="inp-room"  type="text" placeholder="Room ID"  value="room-001" />
+  <input id="inp-token" type="text" placeholder="JWT token" />
+
+  <button id="btn-connect"    class="btn btn-primary">Connect</button>
+  <button id="btn-disconnect" class="btn btn-danger"  style="display:none">Disconnect</button>
+
+  <div class="spacer"></div>
+
+  <div class="status-dot" id="ws-dot"  title="Signaling WS"></div>
+  <div class="status-dot" id="ice-dot" title="WebRTC ICE"></div>
+  <span id="status-text">Idle</span>
+</div>
+
+<!-- ── Main viewport ────────────────────────────────────────────────────────── -->
+<div id="viewport">
+  <video id="remote-video" autoplay playsinline muted></video>
+
+  <!-- Idle / waiting overlay -->
+  <div class="overlay" id="overlay-idle">
+    <div class="overlay-icon">🖥️</div>
+    <div class="overlay-title">No Session</div>
+    <div class="overlay-sub">Enter the broker URL, room ID, and your JWT token, then click Connect.</div>
+  </div>
+
+  <!-- Connecting overlay -->
+  <div class="overlay hidden" id="overlay-connecting">
+    <div class="spinner"></div>
+    <div class="overlay-title">Connecting…</div>
+    <div class="overlay-sub pulse" id="overlay-connecting-sub">Negotiating WebRTC session</div>
+  </div>
+
+  <!-- Relay overlay (ICE disconnected / reconnecting) -->
+  <div class="overlay hidden" id="overlay-relay">
+    <div class="overlay-icon">🔄</div>
+    <div class="overlay-title">Reconnecting to Relay</div>
+    <div class="overlay-sub">Direct path lost — attempting TURN relay connection.</div>
+  </div>
+
+  <!-- Error overlay -->
+  <div class="overlay hidden" id="overlay-error">
+    <div class="overlay-icon">⚠️</div>
+    <div class="overlay-title" id="overlay-error-title">Connection Error</div>
+    <div class="overlay-sub" id="overlay-error-sub"></div>
+  </div>
+
+  <!-- Bottom toolbar (visible while connected) -->
+  <div id="toolbar" style="display:none">
+    <span class="quality-label" style="font-size:12px;color:var(--text-muted)">Bitrate</span>
+    <span id="quality-val">— kbps</span>
+    <div class="sep"></div>
+    <span class="quality-label" style="font-size:12px;color:var(--text-muted)">RTT</span>
+    <span id="latency-val">— ms</span>
+    <div class="sep"></div>
+    <select id="quality-selector" title="Stream Quality">
+      <option value="native" selected>Source (Native)</option>
+      <option value="fit">Fit to Screen</option>
+      <option value="1080p">1080p</option>
+      <option value="720p">720p</option>
+      <option value="480p">480p</option>
+    </select>
+    <div class="sep"></div>
+    <button id="btn-fullscreen" title="Fullscreen">⛶</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
