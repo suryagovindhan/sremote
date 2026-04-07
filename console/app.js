@@ -198,13 +198,15 @@ async function handleOffer(sdpString) {
 
     elVideo.onloadedmetadata = () => {
       console.log('[sRemote] video loadedmetadata. src resolution:', elVideo.videoWidth, 'x', elVideo.videoHeight);
-      // Only cache native bounds on the very first metadata load
       if (!remoteNativeWidth) {
         remoteNativeWidth  = elVideo.videoWidth  || 1920;
         remoteNativeHeight = elVideo.videoHeight || 1080;
         console.log(`[sRemote] Cached native resolution: ${remoteNativeWidth}×${remoteNativeHeight}`);
       }
     };
+    elVideo.onplaying = () => console.log('[sRemote] VIDEO PLAYING');
+    elVideo.onwaiting = () => console.log('[sRemote] VIDEO WAITING (buffering)');
+    elVideo.onerror = (e) => console.error('[sRemote] VIDEO ERROR:', e);
   };
 
   // ── DataChannel from daemon (control channel) ────────────────────────────
@@ -267,7 +269,8 @@ async function handleOffer(sdpString) {
   };
 
   // ── Negotiate ────────────────────────────────────────────────────────────
-  await pc.setRemoteDescription({ type: 'offer', sdp: sdpString });
+  // Use the RTCSessionDescription constructor (spec-compliant, avoids plain-object lint).
+  await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sdpString }));
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
 
@@ -367,7 +370,10 @@ function onContextMenu(e) {
 
 function onWheel(e) {
   e.preventDefault();
-  sendCtrl({ action: 'scroll', delta_y: Math.sign(e.deltaY) * 3 });
+  // Scale raw deltaY into a bounded [-10, 10] range rather than discarding the
+  // magnitude with Math.sign — keeps trackpad momentum feel natural.
+  const delta = Math.round(Math.max(-10, Math.min(10, e.deltaY / 40)));
+  sendCtrl({ action: 'scroll', delta_y: delta || Math.sign(e.deltaY) });
 }
 
 function isInputFocused() {
@@ -376,15 +382,22 @@ function isInputFocused() {
 
 function onKeyDown(e) {
   if (isInputFocused()) return;
-  // Don't intercept browser shortcuts like F5, Ctrl+T
-  if (e.ctrlKey && ['t','w','r','l'].includes(e.key.toLowerCase())) return;
+  // Let the browser handle its own shortcuts:
+  //   Ctrl+Shift+* (DevTools, inspector, etc.)
+  //   Ctrl+Alt+*   (system combos on some platforms)
+  //   Ctrl+[common navigation keys]
+  if (e.ctrlKey && e.shiftKey) return;
+  if (e.ctrlKey && e.altKey)   return;
+  if (e.ctrlKey && ['t','w','r','l','n','f','p','u'].includes(e.key.toLowerCase())) return;
   e.preventDefault();
   sendCtrl({ action: 'keydown', key: e.key });
 }
 
 function onKeyUp(e) {
   if (isInputFocused()) return;
-  if (e.ctrlKey && ['t','w','r','l'].includes(e.key.toLowerCase())) return;
+  if (e.ctrlKey && e.shiftKey) return;
+  if (e.ctrlKey && e.altKey)   return;
+  if (e.ctrlKey && ['t','w','r','l','n','f','p','u'].includes(e.key.toLowerCase())) return;
   e.preventDefault();
   sendCtrl({ action: 'keyup', key: e.key });
 }
