@@ -65,16 +65,16 @@ fn should_shutdown() -> bool {
 
 fn recommended_bitrate_kbps(width: u32, height: u32, fps: u32) -> u32 {
     let pixels = width.saturating_mul(height);
-    let motion_boost = if fps >= 60 { 1400 } else if fps >= 30 { 700 } else { 0 };
+    let motion_boost = if fps >= 60 { 600 } else if fps >= 30 { 200 } else { 0 };
 
     let base = if pixels >= 1920 * 1080 {
-        4000
+        3000
     } else if pixels >= 1280 * 720 {
-        2800
+        2200
     } else if pixels >= 960 * 540 {
-        1800
+        1500
     } else {
-        1200
+        1000
     };
 
     base + motion_boost

@@ -56,7 +56,7 @@ fn load_config() -> Option<DaemonConfig> {
     }
 
     // Bitrate
-    let bitrate_kbps = std::env::var("INITIAL_BITRATE_KBPS").ok().and_then(|s| s.parse().ok()).unwrap_or(3500u32);
+    let bitrate_kbps = std::env::var("INITIAL_BITRATE_KBPS").ok().and_then(|s| s.parse().ok()).unwrap_or(3000u32);
 
     // Width/Height: CLI > Env > None
     let mut width = std::env::var("CAPTURE_WIDTH").ok().and_then(|s| s.parse().ok());
